@@ -8,23 +8,31 @@ using System.Collections;
 public class GunShooting : MonoBehaviour
 {
     [Header("射击设置")]
-    public float damage = 25f;          // 单发伤害
-    public float fireRate = 0.1f;       // 射速，0.1 = 每秒10发
-    public int magazineSize = 30;       // 弹匣容量
-    public int maxReserveAmmo = 90;     // 最大备弹
-    public float reloadTime = 2f;       // 换弹时间
-    public float shootDistance = 100f;  // 射线距离
+    public float damage = 25f;
+    public float fireRate = 0.1f;
+    public int magazineSize = 30;
+    public int maxReserveAmmo = 90;
+    public float reloadTime = 2f;
+    public float shootDistance = 100f;
 
     [Header("外接系统：UI 与特效")]
-    public TextMeshProUGUI ammoText;    // 子弹 UI
-    public Transform gunBarrel;         // 枪口位置，之后做曳光弹用
-    public LineRenderer tracerLine;     // 曳光弹线段，之后做曳光弹用
+    public TextMeshProUGUI ammoText;
+    public Transform gunBarrel;
+    public LineRenderer tracerLine;
 
-    [Header("CS2 风格后坐力")]
-    public float recoilX = -2f;         // 垂直后坐力，负数 = 枪口上跳
-    public float recoilY = 0.5f;        // 水平随机晃动
-    public float snappiness = 12f;      // 后坐力爆发速度
-    public float returnSpeed = 6f;      // 回正速度
+    [Header("后坐力：画面旋转")]
+    public float recoilX = -4f;          // 垂直上跳，负数越大越明显
+    public float recoilY = 1.2f;         // 左右随机晃动
+    public float recoilZ = 0.4f;         // 轻微倾斜画面
+    public float snappiness = 20f;       // 后坐力爆发速度
+    public float returnSpeed = 8f;       // 回正速度
+
+    [Header("后坐力：画面位移")]
+    public float kickBack = 0.06f;       // 摄像机向后震一下
+    public float kickUp = 0.025f;        // 摄像机向上震一下
+    public float kickSide = 0.025f;      // 摄像机左右震一下
+    public float positionSnappiness = 25f;
+    public float positionReturnSpeed = 10f;
 
     [Header("调试")]
     public bool showDebugLog = false;
@@ -40,6 +48,9 @@ public class GunShooting : MonoBehaviour
 
     private Vector3 currentRecoil;
     private Vector3 targetRecoil;
+
+    private Vector3 currentPositionKick;
+    private Vector3 targetPositionKick;
 
     private Coroutine reloadRoutine;
     private Coroutine tracerRoutine;
@@ -81,12 +92,12 @@ public class GunShooting : MonoBehaviour
 
         if (playerCam == null)
         {
-            Debug.LogWarning("GunShooting 没有找到 Camera。请确认脚本挂在 MainCamera 上，或者场景里有带 MainCamera 标签的摄像机。");
+            Debug.LogWarning("GunShooting 没有找到 Camera。请确认脚本挂在 MainCamera 上。");
         }
 
         if (ammoText == null)
         {
-            Debug.LogWarning("GunShooting 的 Ammo Text 没有绑定。请把 Canvas 里的 AmmoText 拖到 MainCamera 的 Ammo Text 槽里。");
+            Debug.LogWarning("GunShooting 的 Ammo Text 没有绑定。请把 Canvas 里的 AmmoText 拖到 Ammo Text 槽里。");
         }
     }
 
@@ -189,29 +200,52 @@ public class GunShooting : MonoBehaviour
 
     void AddRecoil()
     {
-        float randomHorizontalRecoil = Random.Range(-recoilY, recoilY);
+        float randomY = Random.Range(-recoilY, recoilY);
+        float randomZ = Random.Range(-recoilZ, recoilZ);
 
+        // 旋转后坐力：上跳 + 左右晃 + 轻微倾斜
         targetRecoil += new Vector3(
             recoilX,
-            randomHorizontalRecoil,
-            0f
+            randomY,
+            randomZ
+        );
+
+        float randomSide = Random.Range(-kickSide, kickSide);
+
+        // 位移后坐力：镜头向后、向上、左右轻微震动
+        targetPositionKick += new Vector3(
+            randomSide,
+            kickUp,
+            -kickBack
         );
     }
 
     void UpdateRecoil()
     {
-        // 后坐力逐渐回正
+        // 旋转后坐力逐渐回正
         targetRecoil = Vector3.Lerp(
             targetRecoil,
             Vector3.zero,
             returnSpeed * Time.deltaTime
         );
 
-        // 当前后坐力追赶目标后坐力
         currentRecoil = Vector3.Lerp(
             currentRecoil,
             targetRecoil,
             snappiness * Time.deltaTime
+        );
+
+        // 位移后坐力逐渐回正
+        targetPositionKick = Vector3.Lerp(
+            targetPositionKick,
+            Vector3.zero,
+            positionReturnSpeed * Time.deltaTime
+        );
+
+        currentPositionKick = Vector3.Lerp(
+            currentPositionKick,
+            targetPositionKick,
+            positionSnappiness * Time.deltaTime
         );
     }
 
@@ -222,10 +256,10 @@ public class GunShooting : MonoBehaviour
             return;
         }
 
-        // 这里故意使用完整 currentRecoil 叠加。
-        // 因为 Cinemachine 每帧会重新控制摄像机角度，
-        // 所以不能只加 delta，否则后坐力会被抵消得很弱甚至看不见。
+        // Cinemachine 会在每帧控制摄像机，
+        // 所以这里在 LateUpdate 最后强行叠加画面晃动。
         playerCam.transform.localEulerAngles += currentRecoil;
+        playerCam.transform.localPosition += currentPositionKick;
     }
 
     void TryReload()
@@ -252,11 +286,7 @@ public class GunShooting : MonoBehaviour
     {
         isReloading = true;
 
-        if (ammoText != null)
-        {
-            ammoText.text = currentAmmo + " / " + currentReserve + "  Reloading...";
-        }
-
+        // 这里不再显示 Reloading...，避免文字换行后被屏幕底部挡住
         yield return new WaitForSeconds(reloadTime);
 
         int ammoNeeded = magazineSize - currentAmmo;
