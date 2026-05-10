@@ -3,7 +3,6 @@ using UnityEngine.InputSystem;
 using TMPro;
 using System.Collections;
 
-// 执行顺序尽量靠后，确保在 Cinemachine 结算之后再叠加后坐力
 [DefaultExecutionOrder(10000)]
 public class GunShooting : MonoBehaviour
 {
@@ -17,20 +16,24 @@ public class GunShooting : MonoBehaviour
 
     [Header("外接系统：UI 与特效")]
     public TextMeshProUGUI ammoText;
-    public Transform gunBarrel;
     public LineRenderer tracerLine;
 
+    [Header("曳光弹设置")]
+    public Transform muzzleParent; 
+    public Vector3 muzzleLocalOffset = new Vector3(0f, 0.08f, 0.75f);
+    public float tracerDuration = 0.05f;
+
     [Header("后坐力：画面旋转")]
-    public float recoilX = -4f;          // 垂直上跳，负数越大越明显
-    public float recoilY = 1.2f;         // 左右随机晃动
-    public float recoilZ = 0.4f;         // 轻微倾斜画面
-    public float snappiness = 20f;       // 后坐力爆发速度
-    public float returnSpeed = 8f;       // 回正速度
+    public float recoilX = -4f;
+    public float recoilY = 1.2f;
+    public float recoilZ = 0.4f;
+    public float snappiness = 20f;
+    public float returnSpeed = 8f;
 
     [Header("后坐力：画面位移")]
-    public float kickBack = 0.06f;       // 摄像机向后震一下
-    public float kickUp = 0.025f;        // 摄像机向上震一下
-    public float kickSide = 0.025f;      // 摄像机左右震一下
+    public float kickBack = 0.06f;
+    public float kickUp = 0.025f;
+    public float kickSide = 0.025f;
     public float positionSnappiness = 25f;
     public float positionReturnSpeed = 10f;
 
@@ -59,10 +62,8 @@ public class GunShooting : MonoBehaviour
     {
         inputActions = new PlayerInputActions();
 
-        // 优先找挂载这个脚本的物体上的 Camera
         playerCam = GetComponent<Camera>();
 
-        // 如果找不到，再找场景里的 MainCamera
         if (playerCam == null)
         {
             playerCam = Camera.main;
@@ -97,7 +98,17 @@ public class GunShooting : MonoBehaviour
 
         if (ammoText == null)
         {
-            Debug.LogWarning("GunShooting 的 Ammo Text 没有绑定。请把 Canvas 里的 AmmoText 拖到 Ammo Text 槽里。");
+            Debug.LogWarning("GunShooting 的 Ammo Text 没有绑定。");
+        }
+
+        if (tracerLine == null)
+        {
+            Debug.LogWarning("GunShooting 的 Tracer Line 没有绑定。");
+        }
+
+        if (muzzleParent == null)
+        {
+            Debug.LogWarning("GunShooting 的 Muzzle Parent 没有绑定。曳光弹会退回使用摄像机偏移。");
         }
     }
 
@@ -172,7 +183,6 @@ public class GunShooting : MonoBehaviour
         {
             targetPoint = hit.point;
 
-            // 防止打到自己
             bool hitSelf = hit.collider.transform.root == transform.root;
 
             if (!hitSelf)
@@ -203,7 +213,6 @@ public class GunShooting : MonoBehaviour
         float randomY = Random.Range(-recoilY, recoilY);
         float randomZ = Random.Range(-recoilZ, recoilZ);
 
-        // 旋转后坐力：上跳 + 左右晃 + 轻微倾斜
         targetRecoil += new Vector3(
             recoilX,
             randomY,
@@ -212,7 +221,6 @@ public class GunShooting : MonoBehaviour
 
         float randomSide = Random.Range(-kickSide, kickSide);
 
-        // 位移后坐力：镜头向后、向上、左右轻微震动
         targetPositionKick += new Vector3(
             randomSide,
             kickUp,
@@ -222,7 +230,6 @@ public class GunShooting : MonoBehaviour
 
     void UpdateRecoil()
     {
-        // 旋转后坐力逐渐回正
         targetRecoil = Vector3.Lerp(
             targetRecoil,
             Vector3.zero,
@@ -235,7 +242,6 @@ public class GunShooting : MonoBehaviour
             snappiness * Time.deltaTime
         );
 
-        // 位移后坐力逐渐回正
         targetPositionKick = Vector3.Lerp(
             targetPositionKick,
             Vector3.zero,
@@ -256,8 +262,6 @@ public class GunShooting : MonoBehaviour
             return;
         }
 
-        // Cinemachine 会在每帧控制摄像机，
-        // 所以这里在 LateUpdate 最后强行叠加画面晃动。
         playerCam.transform.localEulerAngles += currentRecoil;
         playerCam.transform.localPosition += currentPositionKick;
     }
@@ -286,7 +290,6 @@ public class GunShooting : MonoBehaviour
     {
         isReloading = true;
 
-        // 这里不再显示 Reloading...，避免文字换行后被屏幕底部挡住
         yield return new WaitForSeconds(reloadTime);
 
         int ammoNeeded = magazineSize - currentAmmo;
@@ -301,12 +304,32 @@ public class GunShooting : MonoBehaviour
         UpdateAmmoUI();
     }
 
+    Vector3 GetTracerStartPoint()
+    {
+        if (muzzleParent != null)
+        {
+            return muzzleParent.TransformPoint(muzzleLocalOffset);
+        }
+
+        if (playerCam != null)
+        {
+            return playerCam.transform.position
+                + playerCam.transform.right * 0.35f
+                + playerCam.transform.up * -0.22f
+                + playerCam.transform.forward * 0.75f;
+        }
+
+        return transform.position;
+    }
+
     void ShowTracerEffect(Vector3 targetPoint)
     {
-        if (gunBarrel == null || tracerLine == null)
+        if (tracerLine == null)
         {
             return;
         }
+
+        Vector3 startPoint = GetTracerStartPoint();
 
         if (tracerRoutine != null)
         {
@@ -314,7 +337,7 @@ public class GunShooting : MonoBehaviour
         }
 
         tracerRoutine = StartCoroutine(
-            ShowTracer(gunBarrel.position, targetPoint)
+            ShowTracer(startPoint, targetPoint)
         );
     }
 
@@ -326,7 +349,7 @@ public class GunShooting : MonoBehaviour
         tracerLine.SetPosition(0, startPoint);
         tracerLine.SetPosition(1, endPoint);
 
-        yield return new WaitForSeconds(0.05f);
+        yield return new WaitForSeconds(tracerDuration);
 
         tracerLine.enabled = false;
         tracerRoutine = null;
