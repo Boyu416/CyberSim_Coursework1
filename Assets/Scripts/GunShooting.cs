@@ -19,6 +19,11 @@ public class GunShooting : MonoBehaviour
     public LineRenderer tracerLine;
     public GameObject hitMarker;
 
+    [Header("开枪音效")]
+    public AudioSource weaponAudioSource;
+    public AudioClip fireSound;
+    public float fireVolume = 0.8f;
+
     [Header("曳光弹设置")]
     public Vector3 tracerStartOffset = new Vector3(0.35f, -0.22f, 0.75f);
     public float tracerDuration = 0.05f;
@@ -69,6 +74,11 @@ public class GunShooting : MonoBehaviour
         {
             playerCam = Camera.main;
         }
+
+        if (weaponAudioSource == null)
+        {
+            weaponAudioSource = GetComponent<AudioSource>();
+        }
     }
 
     void OnEnable()
@@ -110,6 +120,16 @@ public class GunShooting : MonoBehaviour
         if (tracerLine == null)
         {
             Debug.LogWarning("GunShooting 的 Tracer Line 没有绑定。");
+        }
+
+        if (weaponAudioSource == null)
+        {
+            Debug.LogWarning("GunShooting 没有绑定 AudioSource。请给 MainCamera 添加 AudioSource。");
+        }
+
+        if (fireSound == null)
+        {
+            Debug.LogWarning("GunShooting 的 Fire Sound 没有绑定。请把枪声音效拖到 Fire Sound 槽里。");
         }
     }
 
@@ -172,6 +192,8 @@ public class GunShooting : MonoBehaviour
 
         UpdateAmmoUI();
 
+        PlayFireSound();
+
         AddRecoil();
 
         Ray ray = playerCam.ScreenPointToRay(
@@ -208,6 +230,16 @@ public class GunShooting : MonoBehaviour
         }
 
         ShowTracerEffect(targetPoint);
+    }
+
+    void PlayFireSound()
+    {
+        if (weaponAudioSource == null || fireSound == null)
+        {
+            return;
+        }
+
+        weaponAudioSource.PlayOneShot(fireSound, fireVolume);
     }
 
     void AddRecoil()
