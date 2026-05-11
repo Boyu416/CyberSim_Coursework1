@@ -17,10 +17,10 @@ public class GunShooting : MonoBehaviour
     [Header("外接系统：UI 与特效")]
     public TextMeshProUGUI ammoText;
     public LineRenderer tracerLine;
+    public GameObject hitMarker;
 
     [Header("曳光弹设置")]
-    public Transform muzzleParent; 
-    public Vector3 muzzleLocalOffset = new Vector3(0f, 0.08f, 0.75f);
+    public Vector3 tracerStartOffset = new Vector3(0.35f, -0.22f, 0.75f);
     public float tracerDuration = 0.05f;
 
     [Header("后坐力：画面旋转")]
@@ -57,6 +57,7 @@ public class GunShooting : MonoBehaviour
 
     private Coroutine reloadRoutine;
     private Coroutine tracerRoutine;
+    private Coroutine hitMarkerRoutine;
 
     void Awake()
     {
@@ -91,6 +92,11 @@ public class GunShooting : MonoBehaviour
             tracerLine.positionCount = 2;
         }
 
+        if (hitMarker != null)
+        {
+            hitMarker.SetActive(false);
+        }
+
         if (playerCam == null)
         {
             Debug.LogWarning("GunShooting 没有找到 Camera。请确认脚本挂在 MainCamera 上。");
@@ -104,11 +110,6 @@ public class GunShooting : MonoBehaviour
         if (tracerLine == null)
         {
             Debug.LogWarning("GunShooting 的 Tracer Line 没有绑定。");
-        }
-
-        if (muzzleParent == null)
-        {
-            Debug.LogWarning("GunShooting 的 Muzzle Parent 没有绑定。曳光弹会退回使用摄像机偏移。");
         }
     }
 
@@ -192,6 +193,7 @@ public class GunShooting : MonoBehaviour
                 if (target != null)
                 {
                     target.TakeDamage(damage);
+                    ShowHitMarker();
                 }
 
                 if (showDebugLog)
@@ -304,32 +306,18 @@ public class GunShooting : MonoBehaviour
         UpdateAmmoUI();
     }
 
-    Vector3 GetTracerStartPoint()
-    {
-        if (muzzleParent != null)
-        {
-            return muzzleParent.TransformPoint(muzzleLocalOffset);
-        }
-
-        if (playerCam != null)
-        {
-            return playerCam.transform.position
-                + playerCam.transform.right * 0.35f
-                + playerCam.transform.up * -0.22f
-                + playerCam.transform.forward * 0.75f;
-        }
-
-        return transform.position;
-    }
-
     void ShowTracerEffect(Vector3 targetPoint)
     {
-        if (tracerLine == null)
+        if (tracerLine == null || playerCam == null)
         {
             return;
         }
 
-        Vector3 startPoint = GetTracerStartPoint();
+        Vector3 startPoint =
+            playerCam.transform.position +
+            playerCam.transform.right * tracerStartOffset.x +
+            playerCam.transform.up * tracerStartOffset.y +
+            playerCam.transform.forward * tracerStartOffset.z;
 
         if (tracerRoutine != null)
         {
@@ -353,6 +341,31 @@ public class GunShooting : MonoBehaviour
 
         tracerLine.enabled = false;
         tracerRoutine = null;
+    }
+
+    void ShowHitMarker()
+    {
+        if (hitMarker == null)
+        {
+            return;
+        }
+
+        if (hitMarkerRoutine != null)
+        {
+            StopCoroutine(hitMarkerRoutine);
+        }
+
+        hitMarkerRoutine = StartCoroutine(HitMarkerCoroutine());
+    }
+
+    IEnumerator HitMarkerCoroutine()
+    {
+        hitMarker.SetActive(true);
+
+        yield return new WaitForSeconds(0.08f);
+
+        hitMarker.SetActive(false);
+        hitMarkerRoutine = null;
     }
 
     void UpdateAmmoUI()
