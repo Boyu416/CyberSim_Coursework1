@@ -2,10 +2,17 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using TMPro;
 using System.Collections;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 [DefaultExecutionOrder(10000)]
 public class GunShooting : MonoBehaviour
 {
+    public static event System.Action ShotFired;
+    public static event System.Action ReloadNeeded;
+    public static event System.Action ReloadCompleted;
+
     [Header("Shooting")]
     public float damage = 25f;
     public float fireRate = 0.1f;
@@ -16,29 +23,39 @@ public class GunShooting : MonoBehaviour
 
     [Header("UI And Effects")]
     public TextMeshProUGUI ammoText;
+    public TextMeshProUGUI reloadingText;
     public LineRenderer tracerLine;
     public GameObject hitMarker;
 
     [Header("Audio")]
     public AudioSource weaponAudioSource;
     public AudioClip fireSound;
+    public AudioClip reloadSound;
     public float fireVolume = 0.8f;
+    public float reloadVolume = 0.8f;
+    public float fireSoundStartTime = 0.5f;
 
     [Header("Tracer")]
     public Vector3 tracerStartOffset = new Vector3(0.35f, -0.22f, 0.75f);
     public float tracerDuration = 0.05f;
 
     [Header("Recoil Rotation")]
-    public float recoilX = -4f;
-    public float recoilY = 1.2f;
-    public float recoilZ = 0.4f;
+    public bool forceReducedRecoil = true;
+    public float recoilX = -2.6f;
+    public float recoilY = 0.35f;
+    public float recoilZ = 0.18f;
+    public float akVerticalBuildUp = -0.14f;
+    public float akMaxVerticalRecoil = -4.0f;
+    public float akLeftBias = -0.42f;
+    public float akHorizontalRandomness = 0.16f;
+    public float recoilPatternResetTime = 0.28f;
     public float snappiness = 20f;
     public float returnSpeed = 8f;
 
     [Header("Recoil Position")]
-    public float kickBack = 0.06f;
-    public float kickUp = 0.025f;
-    public float kickSide = 0.025f;
+    public float kickBack = 0.045f;
+    public float kickUp = 0.02f;
+    public float kickSide = 0.018f;
     public float positionSnappiness = 25f;
     public float positionReturnSpeed = 10f;
 
@@ -63,6 +80,8 @@ public class GunShooting : MonoBehaviour
     private Coroutine reloadRoutine;
     private Coroutine tracerRoutine;
     private Coroutine hitMarkerRoutine;
+    private int recoilShotIndex;
+    private float lastShotTime;
 
     void Awake()
     {
@@ -79,6 +98,13 @@ public class GunShooting : MonoBehaviour
         {
             weaponAudioSource = GetComponent<AudioSource>();
         }
+
+        if (weaponAudioSource == null)
+        {
+            weaponAudioSource = gameObject.AddComponent<AudioSource>();
+        }
+
+        AutoAssignSoundClips();
     }
 
     void OnEnable()
@@ -91,6 +117,11 @@ public class GunShooting : MonoBehaviour
 
     void Start()
     {
+        if (forceReducedRecoil)
+        {
+            ApplyReducedRecoil();
+        }
+
         currentAmmo = magazineSize;
         currentReserve = maxReserveAmmo;
 
@@ -105,6 +136,16 @@ public class GunShooting : MonoBehaviour
         if (hitMarker != null)
         {
             hitMarker.SetActive(false);
+        }
+
+        if (reloadingText == null)
+        {
+            reloadingText = CreateReloadingText();
+        }
+
+        if (reloadingText != null)
+        {
+            reloadingText.gameObject.SetActive(false);
         }
 
         if (playerCam == null)
@@ -130,6 +171,11 @@ public class GunShooting : MonoBehaviour
         if (fireSound == null)
         {
             Debug.LogWarning("GunShooting has no Fire Sound assigned.");
+        }
+
+        if (reloadSound == null)
+        {
+            Debug.LogWarning("GunShooting has no Reload Sound assigned.");
         }
     }
 
@@ -166,6 +212,7 @@ public class GunShooting : MonoBehaviour
 
         if (currentAmmo <= 0)
         {
+            ReloadNeeded?.Invoke();
             return;
         }
 
@@ -193,6 +240,12 @@ public class GunShooting : MonoBehaviour
         UpdateAmmoUI();
         PlayFireSound();
         AddRecoil();
+        ShotFired?.Invoke();
+
+        if (currentAmmo <= 0)
+        {
+            ReloadNeeded?.Invoke();
+        }
 
         Ray ray = playerCam.ScreenPointToRay(
             new Vector3(Screen.width / 2f, Screen.height / 2f, 0f)
@@ -237,17 +290,66 @@ public class GunShooting : MonoBehaviour
             return;
         }
 
-        weaponAudioSource.PlayOneShot(fireSound, fireVolume);
+        PlayClipFromTime(fireSound, fireVolume, fireSoundStartTime, "GunshotAudio");
+    }
+
+    void PlayReloadSound()
+    {
+        if (weaponAudioSource == null || reloadSound == null)
+        {
+            return;
+        }
+
+        weaponAudioSource.PlayOneShot(reloadSound, reloadVolume);
+    }
+
+    void PlayClipFromTime(AudioClip clip, float volume, float startTime, string audioObjectName)
+    {
+        if (clip == null)
+        {
+            return;
+        }
+
+        float clampedStartTime = Mathf.Clamp(startTime, 0f, Mathf.Max(0f, clip.length - 0.01f));
+        GameObject audioObject = new GameObject(audioObjectName);
+        audioObject.transform.position = transform.position;
+
+        AudioSource audioSource = audioObject.AddComponent<AudioSource>();
+        audioSource.clip = clip;
+        audioSource.volume = volume;
+        audioSource.spatialBlend = weaponAudioSource != null ? weaponAudioSource.spatialBlend : 0f;
+        audioSource.outputAudioMixerGroup = weaponAudioSource != null ? weaponAudioSource.outputAudioMixerGroup : null;
+        audioSource.time = clampedStartTime;
+        audioSource.Play();
+
+        Destroy(audioObject, clip.length - clampedStartTime + 0.1f);
     }
 
     void AddRecoil()
     {
-        float randomY = Random.Range(-recoilY, recoilY);
+        if (Time.time - lastShotTime > recoilPatternResetTime)
+        {
+            recoilShotIndex = 0;
+        }
+
+        recoilShotIndex++;
+        lastShotTime = Time.time;
+
+        float verticalRecoil = Mathf.Max(
+            akMaxVerticalRecoil,
+            recoilX + akVerticalBuildUp * Mathf.Min(recoilShotIndex, 10)
+        );
+
+        float horizontalRecoil =
+            akLeftBias +
+            Mathf.Sin(recoilShotIndex * 0.75f) * recoilY +
+            Random.Range(-akHorizontalRandomness, akHorizontalRandomness);
+
         float randomZ = Random.Range(-recoilZ, recoilZ);
 
         targetRecoil += new Vector3(
-            recoilX,
-            randomY,
+            verticalRecoil,
+            horizontalRecoil,
             randomZ
         );
 
@@ -258,6 +360,23 @@ public class GunShooting : MonoBehaviour
             kickUp,
             -kickBack
         );
+    }
+
+    void ApplyReducedRecoil()
+    {
+        recoilX = -2.6f;
+        recoilY = 0.35f;
+        recoilZ = 0.18f;
+        akVerticalBuildUp = -0.14f;
+        akMaxVerticalRecoil = -4.0f;
+        akLeftBias = -0.42f;
+        akHorizontalRandomness = 0.16f;
+        recoilPatternResetTime = 0.28f;
+        kickBack = 0.045f;
+        kickUp = 0.02f;
+        kickSide = 0.018f;
+        returnSpeed = 9f;
+        positionReturnSpeed = 11f;
     }
 
     void UpdateRecoil()
@@ -321,6 +440,8 @@ public class GunShooting : MonoBehaviour
     IEnumerator ReloadCoroutine()
     {
         isReloading = true;
+        PlayReloadSound();
+        SetReloadingTextVisible(true);
 
         yield return new WaitForSeconds(reloadTime);
 
@@ -332,8 +453,10 @@ public class GunShooting : MonoBehaviour
 
         isReloading = false;
         reloadRoutine = null;
+        SetReloadingTextVisible(false);
 
         UpdateAmmoUI();
+        ReloadCompleted?.Invoke();
     }
 
     void ShowTracerEffect(Vector3 targetPoint)
@@ -406,12 +529,89 @@ public class GunShooting : MonoBehaviour
         }
     }
 
+    void SetReloadingTextVisible(bool visible)
+    {
+        if (reloadingText != null)
+        {
+            reloadingText.gameObject.SetActive(visible);
+        }
+    }
+
+    TextMeshProUGUI CreateReloadingText()
+    {
+        Canvas canvas = FindFirstObjectByType<Canvas>();
+
+        if (canvas == null)
+        {
+            GameObject canvasObject = new GameObject("Canvas");
+            canvas = canvasObject.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvasObject.AddComponent<UnityEngine.UI.CanvasScaler>();
+            canvasObject.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+        }
+
+        GameObject textObject = new GameObject("ReloadingText");
+        textObject.transform.SetParent(canvas.transform, false);
+
+        TextMeshProUGUI text = textObject.AddComponent<TextMeshProUGUI>();
+        text.text = "Reloading";
+        text.fontSize = 42f;
+        text.alignment = TextAlignmentOptions.Center;
+        text.color = Color.white;
+
+        RectTransform rectTransform = text.rectTransform;
+        rectTransform.anchorMin = new Vector2(0.5f, 0f);
+        rectTransform.anchorMax = new Vector2(0.5f, 0f);
+        rectTransform.pivot = new Vector2(0.5f, 0f);
+        rectTransform.anchoredPosition = new Vector2(0f, 120f);
+        rectTransform.sizeDelta = new Vector2(500f, 80f);
+
+        return text;
+    }
+
+    void AutoAssignSoundClips()
+    {
+#if UNITY_EDITOR
+        if (fireSound == null)
+        {
+            fireSound = FindAudioClipInSoundsFolder("Gunshot");
+        }
+
+        if (reloadSound == null)
+        {
+            reloadSound = FindAudioClipInSoundsFolder("Reloading");
+        }
+#endif
+    }
+
+#if UNITY_EDITOR
+    AudioClip FindAudioClipInSoundsFolder(string clipName)
+    {
+        string[] guids = AssetDatabase.FindAssets(clipName + " t:AudioClip", new[] { "Assets/Sounds" });
+
+        if (guids.Length == 0)
+        {
+            return null;
+        }
+
+        string path = AssetDatabase.GUIDToAssetPath(guids[0]);
+        return AssetDatabase.LoadAssetAtPath<AudioClip>(path);
+    }
+
+    void OnValidate()
+    {
+        AutoAssignSoundClips();
+    }
+#endif
+
     void OnDisable()
     {
         if (inputActions != null)
         {
             inputActions.Player.Disable();
         }
+
+        SetReloadingTextVisible(false);
     }
 
     void OnDestroy()

@@ -13,13 +13,29 @@ namespace StarterAssets
 	{
 		[Header("Player")]
 		[Tooltip("Move speed of the character in m/s")]
-		public float MoveSpeed = 4.0f;
+		public float MoveSpeed = 7.0f;
 		[Tooltip("Sprint speed of the character in m/s")]
-		public float SprintSpeed = 6.0f;
+		public float SprintSpeed = 7.0f;
 		[Tooltip("Rotation speed of the character")]
 		public float RotationSpeed = 1.0f;
 		[Tooltip("Acceleration and deceleration")]
 		public float SpeedChangeRate = 10.0f;
+		[Tooltip("Force CS-style movement values at runtime")]
+		public bool ForceCsMovementValues = true;
+		[Tooltip("Move speed while holding Ctrl")]
+		public float QuietWalkSpeed = 2.8f;
+
+		[Header("Crouch")]
+		[Tooltip("Move speed while crouching")]
+		public float CrouchSpeed = 2.1f;
+		[Tooltip("CharacterController height while standing")]
+		public float StandingHeight = 1.8f;
+		[Tooltip("CharacterController height while crouching")]
+		public float CrouchingHeight = 1.0f;
+		[Tooltip("How quickly the player moves between standing and crouching")]
+		public float CrouchTransitionSpeed = 10.0f;
+		[Tooltip("Space checked above the player before standing up")]
+		public float StandCheckRadius = 0.35f;
 
 		[Space(10)]
 		[Tooltip("The height the player can jump")]
@@ -71,6 +87,9 @@ namespace StarterAssets
 		private CharacterController _controller;
 		private StarterAssetsInputs _input;
 		private GameObject _mainCamera;
+		private Vector3 _standingCenter;
+		private Vector3 _cameraTargetStandingLocalPosition;
+		private bool _isCrouching;
 
 		private const float _threshold = 0.01f;
 
@@ -97,6 +116,11 @@ namespace StarterAssets
 
 		private void Start()
 		{
+			if (ForceCsMovementValues)
+			{
+				ApplyCsMovementValues();
+			}
+
 			_controller = GetComponent<CharacterController>();
 			_input = GetComponent<StarterAssetsInputs>();
 #if ENABLE_INPUT_SYSTEM
@@ -108,10 +132,18 @@ namespace StarterAssets
 			// reset our timeouts on start
 			_jumpTimeoutDelta = JumpTimeout;
 			_fallTimeoutDelta = FallTimeout;
+			_standingCenter = _controller.center;
+			StandingHeight = _controller.height;
+
+			if (CinemachineCameraTarget != null)
+			{
+				_cameraTargetStandingLocalPosition = CinemachineCameraTarget.transform.localPosition;
+			}
 		}
 
 		private void Update()
 		{
+			HandleCrouch();
 			JumpAndGravity();
 			GroundedCheck();
 			Move();
@@ -154,7 +186,7 @@ namespace StarterAssets
 		private void Move()
 		{
 			// set target speed based on move speed, sprint speed and if sprint is pressed
-			float targetSpeed = _input.sprint ? SprintSpeed : MoveSpeed;
+			float targetSpeed = _isCrouching ? CrouchSpeed : (IsQuietWalkPressed() ? QuietWalkSpeed : MoveSpeed);
 
 			// a simplistic acceleration and deceleration designed to be easy to remove, replace, or iterate upon
 
@@ -196,6 +228,69 @@ namespace StarterAssets
 
 			// move the player
 			_controller.Move(inputDirection.normalized * (_speed * Time.deltaTime) + new Vector3(0.0f, _verticalVelocity, 0.0f) * Time.deltaTime);
+		}
+
+		private void HandleCrouch()
+		{
+#if ENABLE_INPUT_SYSTEM
+			bool shiftPressed = Keyboard.current != null &&
+				(Keyboard.current.leftShiftKey.isPressed || Keyboard.current.rightShiftKey.isPressed);
+#else
+			bool shiftPressed = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+#endif
+			bool wantsToCrouch = _input.crouch || shiftPressed;
+
+			if (!wantsToCrouch && !CanStandUp())
+			{
+				wantsToCrouch = true;
+			}
+
+			_isCrouching = wantsToCrouch;
+
+			float targetHeight = _isCrouching ? CrouchingHeight : StandingHeight;
+			float heightDelta = StandingHeight - targetHeight;
+			Vector3 targetCenter = _standingCenter;
+			targetCenter.y -= heightDelta * 0.5f;
+
+			_controller.height = Mathf.Lerp(_controller.height, targetHeight, Time.deltaTime * CrouchTransitionSpeed);
+			_controller.center = Vector3.Lerp(_controller.center, targetCenter, Time.deltaTime * CrouchTransitionSpeed);
+
+			if (CinemachineCameraTarget != null)
+			{
+				Vector3 targetCameraPosition = _cameraTargetStandingLocalPosition;
+				targetCameraPosition.y -= heightDelta;
+				CinemachineCameraTarget.transform.localPosition = Vector3.Lerp(
+					CinemachineCameraTarget.transform.localPosition,
+					targetCameraPosition,
+					Time.deltaTime * CrouchTransitionSpeed
+				);
+			}
+		}
+
+		private bool CanStandUp()
+		{
+			float crouchToStandDelta = StandingHeight - CrouchingHeight;
+			Vector3 checkPosition = transform.position + Vector3.up * (CrouchingHeight + crouchToStandDelta + StandCheckRadius);
+			return !Physics.CheckSphere(checkPosition, StandCheckRadius, GroundLayers, QueryTriggerInteraction.Ignore);
+		}
+
+		private bool IsQuietWalkPressed()
+		{
+#if ENABLE_INPUT_SYSTEM
+			return Keyboard.current != null &&
+				(Keyboard.current.leftCtrlKey.isPressed || Keyboard.current.rightCtrlKey.isPressed);
+#else
+			return Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+#endif
+		}
+
+		private void ApplyCsMovementValues()
+		{
+			MoveSpeed = 7.0f;
+			SprintSpeed = 7.0f;
+			QuietWalkSpeed = 2.8f;
+			CrouchSpeed = 2.1f;
+			SpeedChangeRate = 12.0f;
 		}
 
 		private void JumpAndGravity()

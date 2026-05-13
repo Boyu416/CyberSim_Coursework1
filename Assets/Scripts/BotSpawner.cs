@@ -1,6 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 public class BotSpawner : MonoBehaviour
 {
@@ -15,6 +18,8 @@ public class BotSpawner : MonoBehaviour
 
     [Header("Runtime Safety")]
     public bool forceStableRuntimeValues = true;
+    public bool enableLevel1TrainingCamp = true;
+    public bool spawnOnStart = true;
     public bool expandMapBeforeSpawning = false;
     public bool buildFloorBoundaryBeforeSpawning = true;
     public bool scatterPropsBeforeSpawning = true;
@@ -63,6 +68,14 @@ public class BotSpawner : MonoBehaviour
     public float botClearanceBottom = 0.55f;
     public float botClearanceTop = 1.9f;
 
+    [Header("Bot Visual")]
+    public bool replaceGeneratedBotVisual = true;
+    public GameObject botVisualPrefab;
+    public Vector3 botVisualLocalPosition = Vector3.zero;
+    public Vector3 botVisualLocalEulerAngles = Vector3.zero;
+    public float botVisualScale = 1f;
+    public bool normalizeGeneratedBotCollider = true;
+
     private readonly List<Vector3> spawnedPositions = new List<Vector3>();
 
     void Start()
@@ -71,6 +84,8 @@ public class BotSpawner : MonoBehaviour
         {
             ApplyStableRuntimeValues();
         }
+
+        AutoAssignBotVisualPrefab();
 
         if (player == null)
         {
@@ -108,12 +123,22 @@ public class BotSpawner : MonoBehaviour
             ScatterMapProps();
         }
 
-        SpawnBotsAroundPlayer();
+        if (enableLevel1TrainingCamp && GetComponent<Level1TrainingCamp>() == null)
+        {
+            gameObject.AddComponent<Level1TrainingCamp>();
+        }
+
+        if (spawnOnStart)
+        {
+            SpawnBotsAroundPlayer();
+        }
     }
 
     void ApplyStableRuntimeValues()
     {
         botCount = 3;
+        enableLevel1TrainingCamp = true;
+        spawnOnStart = false;
         expandMapBeforeSpawning = false;
         buildFloorBoundaryBeforeSpawning = true;
         scatterPropsBeforeSpawning = true;
@@ -133,6 +158,9 @@ public class BotSpawner : MonoBehaviour
         requiredFlatRadius = 0.45f;
         maxFlatHeightDifference = 0.35f;
         botClearanceRadius = 0.25f;
+        replaceGeneratedBotVisual = true;
+        normalizeGeneratedBotCollider = true;
+        botVisualScale = 1f;
     }
 
     void ScatterMapProps()
@@ -194,34 +222,50 @@ public class BotSpawner : MonoBehaviour
         mapExpander.ExpandMap();
     }
 
-    void SpawnBotsAroundPlayer()
+    public void SpawnBotsAroundPlayer()
     {
         spawnedPositions.Clear();
+        SpawnBots(botCount);
+    }
+
+    public int SpawnBots(int count)
+    {
+        int spawnedCount = 0;
 
         if (botPrefab == null)
         {
             Debug.LogWarning("BotSpawner has no Bot Prefab assigned.");
-            return;
+            return spawnedCount;
         }
 
         if (player == null)
         {
             Debug.LogWarning("BotSpawner has no Player assigned. Drag PlayerCapsule into the Player field.");
-            return;
+            return spawnedCount;
         }
 
-        for (int i = 0; i < botCount; i++)
+        for (int i = 0; i < count; i++)
         {
-            if (!TrySpawnOneBot())
+            if (SpawnOneBot() == null)
             {
                 Debug.LogWarning("A bot could not find a valid spawn position. Increase max attempts or check map colliders.");
             }
+            else
+            {
+                spawnedCount++;
+            }
         }
 
-        Debug.Log("BotSpawner spawned " + spawnedPositions.Count + " / " + botCount + " bots.");
+        Debug.Log("BotSpawner spawned " + spawnedCount + " / " + count + " bots.");
+        return spawnedCount;
     }
 
-    bool TrySpawnOneBot()
+    public void ClearSpawnedPositionHistory()
+    {
+        spawnedPositions.Clear();
+    }
+
+    public GameObject SpawnOneBot()
     {
         for (int attempt = 0; attempt < maxAttemptsPerBot; attempt++)
         {
@@ -243,13 +287,76 @@ public class BotSpawner : MonoBehaviour
             }
 
             Quaternion randomRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
-            Instantiate(botPrefab, spawnPosition, randomRotation);
+            GameObject spawnedBot = Instantiate(botPrefab, spawnPosition, randomRotation);
+            PrepareSpawnedBot(spawnedBot);
             spawnedPositions.Add(spawnPosition);
-            return true;
+            return spawnedBot;
         }
 
-        return false;
+        return null;
     }
+
+    void PrepareSpawnedBot(GameObject spawnedBot)
+    {
+        if (spawnedBot == null)
+        {
+            return;
+        }
+
+        if (normalizeGeneratedBotCollider)
+        {
+            CapsuleCollider capsuleCollider = spawnedBot.GetComponent<CapsuleCollider>();
+
+            if (capsuleCollider != null)
+            {
+                capsuleCollider.radius = 0.45f;
+                capsuleCollider.height = 2f;
+                capsuleCollider.center = new Vector3(0f, 1f, 0f);
+            }
+        }
+
+        if (!replaceGeneratedBotVisual)
+        {
+            return;
+        }
+
+        AutoAssignBotVisualPrefab();
+
+        if (botVisualPrefab == null)
+        {
+            return;
+        }
+
+        Renderer[] oldRenderers = spawnedBot.GetComponentsInChildren<Renderer>();
+
+        for (int i = 0; i < oldRenderers.Length; i++)
+        {
+            oldRenderers[i].enabled = false;
+        }
+
+        GameObject botVisual = Instantiate(botVisualPrefab, spawnedBot.transform);
+        botVisual.name = "BotVisual_Idle";
+        botVisual.transform.localPosition = botVisualLocalPosition;
+        botVisual.transform.localRotation = Quaternion.Euler(botVisualLocalEulerAngles);
+        botVisual.transform.localScale = Vector3.one * botVisualScale;
+    }
+
+    void AutoAssignBotVisualPrefab()
+    {
+#if UNITY_EDITOR
+        if (botVisualPrefab == null)
+        {
+            botVisualPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Modles/Idle.fbx");
+        }
+#endif
+    }
+
+#if UNITY_EDITOR
+    void OnValidate()
+    {
+        AutoAssignBotVisualPrefab();
+    }
+#endif
 
     Vector3 GetCandidatePosition()
     {
