@@ -15,6 +15,9 @@ public class BotSpawner : MonoBehaviour
 
     [Header("Runtime Safety")]
     public bool forceStableRuntimeValues = true;
+    public bool expandMapBeforeSpawning = false;
+    public bool buildFloorBoundaryBeforeSpawning = true;
+    public bool scatterPropsBeforeSpawning = true;
 
     [Header("Optional Fixed Spawn Points")]
     public Transform spawnPointsParent;
@@ -23,8 +26,19 @@ public class BotSpawner : MonoBehaviour
 
     [Header("Random Spawn Around Player")]
     public float minDistanceFromPlayer = 7f;
-    public float maxDistanceFromPlayer = 24f;
+    public float maxDistanceFromPlayer = 60f;
     public float minDistanceBetweenBots = 2f;
+
+    [Header("Expanded Map Bounds")]
+    public bool useExpandedMapBounds = true;
+    public bool usePlayerAsMapCenter = true;
+    public Vector3 mapCenter = Vector3.zero;
+    public float mapHalfSizeX = 45f;
+    public float mapHalfSizeZ = 85f;
+    public float mapBoundaryMargin = 2.5f;
+    public bool createOuterWalls = false;
+    public float outerWallHeight = 5f;
+    public float outerWallThickness = 0.6f;
 
     [Header("NavMesh Placement")]
     public bool useNavMesh = true;
@@ -68,15 +82,50 @@ public class BotSpawner : MonoBehaviour
             }
         }
 
+        if (useExpandedMapBounds && usePlayerAsMapCenter && player != null)
+        {
+            mapCenter = player.position;
+            SnapMapCenterToGround();
+        }
+
+        if (useExpandedMapBounds && createOuterWalls)
+        {
+            CreateOuterWalls();
+        }
+
+        if (expandMapBeforeSpawning)
+        {
+            ExpandMapWithExistingPieces();
+        }
+
+        if (buildFloorBoundaryBeforeSpawning)
+        {
+            BuildFloorBoundaryWalls();
+        }
+
+        if (scatterPropsBeforeSpawning)
+        {
+            ScatterMapProps();
+        }
+
         SpawnBotsAroundPlayer();
     }
 
     void ApplyStableRuntimeValues()
     {
         botCount = 3;
+        expandMapBeforeSpawning = false;
+        buildFloorBoundaryBeforeSpawning = true;
+        scatterPropsBeforeSpawning = true;
         preferSpawnPoints = false;
+        useExpandedMapBounds = true;
+        usePlayerAsMapCenter = true;
+        createOuterWalls = false;
+        mapHalfSizeX = 45f;
+        mapHalfSizeZ = 85f;
+        mapBoundaryMargin = 2.5f;
         minDistanceFromPlayer = 7f;
-        maxDistanceFromPlayer = 24f;
+        maxDistanceFromPlayer = 60f;
         minDistanceBetweenBots = 2f;
         navMeshSearchRadius = 6f;
         maxAttemptsPerBot = 2000;
@@ -84,6 +133,65 @@ public class BotSpawner : MonoBehaviour
         requiredFlatRadius = 0.45f;
         maxFlatHeightDifference = 0.35f;
         botClearanceRadius = 0.25f;
+    }
+
+    void ScatterMapProps()
+    {
+        MapPropScatterer scatterer = GetComponent<MapPropScatterer>();
+
+        if (scatterer == null)
+        {
+            scatterer = gameObject.AddComponent<MapPropScatterer>();
+        }
+
+        scatterer.scatterOnStart = false;
+        scatterer.floorObjectName = "BG";
+        scatterer.sourceRootName = "Demo";
+        scatterer.boxGroupCount = 25;
+        scatterer.minBoxesPerGroup = 3;
+        scatterer.maxBoxesPerGroup = 3;
+        scatterer.buildingCount = 8;
+        scatterer.smallCoverCount = 0;
+        scatterer.edgeMargin = 6f;
+        scatterer.minDistanceFromPlayer = 8f;
+        scatterer.ScatterProps();
+    }
+
+    void BuildFloorBoundaryWalls()
+    {
+        FloorBoundaryWalls boundaryWalls = GetComponent<FloorBoundaryWalls>();
+
+        if (boundaryWalls == null)
+        {
+            boundaryWalls = gameObject.AddComponent<FloorBoundaryWalls>();
+        }
+
+        boundaryWalls.buildOnStart = false;
+        boundaryWalls.floorObjectName = "BG";
+        boundaryWalls.sourceRootName = "Demo";
+        boundaryWalls.disableOldPerimeterWalls = true;
+        boundaryWalls.edgeInset = 0.6f;
+        boundaryWalls.oldWallEdgeTolerance = 4f;
+        boundaryWalls.BuildBoundaryWalls();
+    }
+
+    void ExpandMapWithExistingPieces()
+    {
+        MapExpander mapExpander = GetComponent<MapExpander>();
+
+        if (mapExpander == null)
+        {
+            mapExpander = gameObject.AddComponent<MapExpander>();
+        }
+
+        mapExpander.expandOnStart = false;
+        mapExpander.sourceRootName = "Demo";
+        mapExpander.extraTiles = 1;
+        mapExpander.expansionDirection = MapExpander.ExpansionDirection.PositiveZ;
+        mapExpander.tileOverlap = 0.4f;
+        mapExpander.removeMiddleWalls = true;
+        mapExpander.seamStripWidth = 2.2f;
+        mapExpander.ExpandMap();
     }
 
     void SpawnBotsAroundPlayer()
@@ -150,7 +258,27 @@ public class BotSpawner : MonoBehaviour
             return spawnPointPosition;
         }
 
+        if (useExpandedMapBounds)
+        {
+            return GetRandomPositionInsideExpandedMap();
+        }
+
         return GetRandomPositionAroundPlayer();
+    }
+
+    Vector3 GetRandomPositionInsideExpandedMap()
+    {
+        float x = Random.Range(
+            mapCenter.x - mapHalfSizeX + mapBoundaryMargin,
+            mapCenter.x + mapHalfSizeX - mapBoundaryMargin
+        );
+
+        float z = Random.Range(
+            mapCenter.z - mapHalfSizeZ + mapBoundaryMargin,
+            mapCenter.z + mapHalfSizeZ - mapBoundaryMargin
+        );
+
+        return new Vector3(x, mapCenter.y, z);
     }
 
     bool TryGetRandomSpawnPoint(out Vector3 spawnPointPosition)
@@ -315,5 +443,57 @@ public class BotSpawner : MonoBehaviour
         }
 
         return true;
+    }
+
+    void CreateOuterWalls()
+    {
+        GameObject wallParent = new GameObject("Generated_OuterWalls");
+
+        CreateWall(
+            wallParent.transform,
+            "OuterWall_North",
+            new Vector3(mapCenter.x, mapCenter.y + outerWallHeight * 0.5f, mapCenter.z + mapHalfSizeZ),
+            new Vector3(mapHalfSizeX * 2f, outerWallHeight, outerWallThickness)
+        );
+
+        CreateWall(
+            wallParent.transform,
+            "OuterWall_South",
+            new Vector3(mapCenter.x, mapCenter.y + outerWallHeight * 0.5f, mapCenter.z - mapHalfSizeZ),
+            new Vector3(mapHalfSizeX * 2f, outerWallHeight, outerWallThickness)
+        );
+
+        CreateWall(
+            wallParent.transform,
+            "OuterWall_East",
+            new Vector3(mapCenter.x + mapHalfSizeX, mapCenter.y + outerWallHeight * 0.5f, mapCenter.z),
+            new Vector3(outerWallThickness, outerWallHeight, mapHalfSizeZ * 2f)
+        );
+
+        CreateWall(
+            wallParent.transform,
+            "OuterWall_West",
+            new Vector3(mapCenter.x - mapHalfSizeX, mapCenter.y + outerWallHeight * 0.5f, mapCenter.z),
+            new Vector3(outerWallThickness, outerWallHeight, mapHalfSizeZ * 2f)
+        );
+    }
+
+    void CreateWall(Transform parent, string wallName, Vector3 position, Vector3 scale)
+    {
+        GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        wall.name = wallName;
+        wall.transform.SetParent(parent);
+        wall.transform.position = position;
+        wall.transform.localScale = scale;
+    }
+
+    void SnapMapCenterToGround()
+    {
+        Vector3 rayOrigin = mapCenter + Vector3.up * surfaceRaycastHeight;
+
+        if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, surfaceRaycastHeight * 2f, spawnSurfaceMask, QueryTriggerInteraction.Ignore))
+        {
+            mapCenter.y = hit.point.y;
+        }
     }
 }

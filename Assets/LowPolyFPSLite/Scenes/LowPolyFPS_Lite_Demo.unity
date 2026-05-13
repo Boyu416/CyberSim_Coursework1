@@ -336,7 +336,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &125489550
 Transform:
   m_ObjectHideFlags: 0
@@ -1770,6 +1770,11 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 942386865516021016, guid: 12786b453b3a7cc4a815f43857ab7460, type: 3}
   m_PrefabInstance: {fileID: 492797213}
   m_PrefabAsset: {fileID: 0}
+--- !u!4 &594138458 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 937451010987979973, guid: 035bf1ba97d19214580cfe6f5a29fdc3, type: 3}
+  m_PrefabInstance: {fileID: 1723546382}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &619226704
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2623,7 +2628,7 @@ Transform:
   m_GameObject: {fileID: 836754404}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 4.84, y: 1.7, z: -5.03}
+  m_LocalPosition: {x: 4.84, y: 4.8, z: -5.03}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -2864,7 +2869,7 @@ Transform:
   m_GameObject: {fileID: 855464011}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.7, y: -2.2, z: -17.3}
+  m_LocalPosition: {x: -0.7, y: 7.9, z: -17.3}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -5113,7 +5118,7 @@ Transform:
   m_GameObject: {fileID: 1195384306}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -18.5, y: -3.4, z: 1.4}
+  m_LocalPosition: {x: -3.73, y: -0.38, z: 1.4}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -6070,7 +6075,7 @@ Transform:
   m_GameObject: {fileID: 1618514667}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 3.61, y: 5.7, z: -6.04}
+  m_LocalPosition: {x: -3.13, y: 5.7, z: -14.11}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -6218,7 +6223,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1638471010}
   m_Layer: 0
-  m_Name: SpawnPoint_2 (1)
+  m_Name: SpawnPoint_2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -7031,16 +7036,45 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BotSpawner
   botPrefab: {fileID: 7274866950952346698, guid: 056fea58ce48ae24ea4702e0b01075df, type: 3}
-  spawnPoints:
-  - {fileID: 0}
-  - {fileID: 1618514668}
-  - {fileID: 836754405}
-  - {fileID: 1195384307}
-  - {fileID: 0}
+  player: {fileID: 594138458}
   botCount: 3
-  randomRotation: 1
-  spawnRadius: 0.5
-  spawnHeightOffset: 0.2
+  forceStableRuntimeValues: 1
+  expandMapBeforeSpawning: 1
+  buildFloorBoundaryBeforeSpawning: 1
+  scatterPropsBeforeSpawning: 1
+  spawnPointsParent: {fileID: 0}
+  spawnPoints: []
+  preferSpawnPoints: 1
+  minDistanceFromPlayer: 3
+  maxDistanceFromPlayer: 8
+  minDistanceBetweenBots: 4
+  useExpandedMapBounds: 1
+  usePlayerAsMapCenter: 1
+  mapCenter: {x: 0, y: 0, z: 0}
+  mapHalfSizeX: 35
+  mapHalfSizeZ: 35
+  mapBoundaryMargin: 2.5
+  createOuterWalls: 1
+  outerWallHeight: 5
+  outerWallThickness: 0.6
+  useNavMesh: 1
+  navMeshSearchRadius: 4
+  maxAttemptsPerBot: 100
+  spawnSurfaceMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  blockingMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  surfaceRaycastHeight: 60
+  maxSpawnHeightAbovePlayer: 2.5
+  spawnHeightOffset: 0.1
+  requiredFlatRadius: 0.9
+  maxFlatHeightDifference: 0.25
+  minSurfaceUpDot: 0.75
+  botClearanceRadius: 0.45
+  botClearanceBottom: 0.55
+  botClearanceTop: 1.9
 --- !u!4 &1799347371
 Transform:
   m_ObjectHideFlags: 0
@@ -7050,7 +7084,7 @@ Transform:
   m_GameObject: {fileID: 1799347369}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1.42007, y: 3.06153, z: 5.30214}
+  m_LocalPosition: {x: -0.06, y: 3.06153, z: 5.30214}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
