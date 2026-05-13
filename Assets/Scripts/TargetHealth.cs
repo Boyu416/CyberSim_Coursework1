@@ -3,6 +3,7 @@ using UnityEngine;
 public class TargetHealth : MonoBehaviour
 {
     public float maxHealth = 100f;
+
     private float currentHealth;
 
     void Start()
@@ -13,9 +14,9 @@ public class TargetHealth : MonoBehaviour
     public void TakeDamage(float damage)
     {
         currentHealth -= damage;
-        Debug.Log($"{gameObject.name} 扣血: {damage}, 剩血: {currentHealth}");
+        Debug.Log($"{gameObject.name} took {damage} damage. Health left: {currentHealth}");
 
-        if (currentHealth <= 0)
+        if (currentHealth <= 0f)
         {
             Die();
         }
@@ -23,7 +24,7 @@ public class TargetHealth : MonoBehaviour
 
     void Die()
     {
-        Debug.Log($"{gameObject.name} 被毁！");
+        Debug.Log($"{gameObject.name} destroyed.");
         Destroy(gameObject);
     }
 }

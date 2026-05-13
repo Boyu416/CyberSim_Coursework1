@@ -6,7 +6,7 @@ using System.Collections;
 [DefaultExecutionOrder(10000)]
 public class GunShooting : MonoBehaviour
 {
-    [Header("射击设置")]
+    [Header("Shooting")]
     public float damage = 25f;
     public float fireRate = 0.1f;
     public int magazineSize = 30;
@@ -14,35 +14,35 @@ public class GunShooting : MonoBehaviour
     public float reloadTime = 2f;
     public float shootDistance = 100f;
 
-    [Header("外接系统：UI 与特效")]
+    [Header("UI And Effects")]
     public TextMeshProUGUI ammoText;
     public LineRenderer tracerLine;
     public GameObject hitMarker;
 
-    [Header("开枪音效")]
+    [Header("Audio")]
     public AudioSource weaponAudioSource;
     public AudioClip fireSound;
     public float fireVolume = 0.8f;
 
-    [Header("曳光弹设置")]
+    [Header("Tracer")]
     public Vector3 tracerStartOffset = new Vector3(0.35f, -0.22f, 0.75f);
     public float tracerDuration = 0.05f;
 
-    [Header("后坐力：画面旋转")]
+    [Header("Recoil Rotation")]
     public float recoilX = -4f;
     public float recoilY = 1.2f;
     public float recoilZ = 0.4f;
     public float snappiness = 20f;
     public float returnSpeed = 8f;
 
-    [Header("后坐力：画面位移")]
+    [Header("Recoil Position")]
     public float kickBack = 0.06f;
     public float kickUp = 0.025f;
     public float kickSide = 0.025f;
     public float positionSnappiness = 25f;
     public float positionReturnSpeed = 10f;
 
-    [Header("调试")]
+    [Header("Debug")]
     public bool showDebugLog = false;
 
     private int currentAmmo;
@@ -109,27 +109,27 @@ public class GunShooting : MonoBehaviour
 
         if (playerCam == null)
         {
-            Debug.LogWarning("GunShooting 没有找到 Camera。请确认脚本挂在 MainCamera 上。");
+            Debug.LogWarning("GunShooting could not find a Camera. Put this script on MainCamera or assign Camera.main.");
         }
 
         if (ammoText == null)
         {
-            Debug.LogWarning("GunShooting 的 Ammo Text 没有绑定。");
+            Debug.LogWarning("GunShooting has no Ammo Text assigned.");
         }
 
         if (tracerLine == null)
         {
-            Debug.LogWarning("GunShooting 的 Tracer Line 没有绑定。");
+            Debug.LogWarning("GunShooting has no Tracer Line assigned.");
         }
 
         if (weaponAudioSource == null)
         {
-            Debug.LogWarning("GunShooting 没有绑定 AudioSource。请给 MainCamera 添加 AudioSource。");
+            Debug.LogWarning("GunShooting has no AudioSource assigned.");
         }
 
         if (fireSound == null)
         {
-            Debug.LogWarning("GunShooting 的 Fire Sound 没有绑定。请把枪声音效拖到 Fire Sound 槽里。");
+            Debug.LogWarning("GunShooting has no Fire Sound assigned.");
         }
     }
 
@@ -191,9 +191,7 @@ public class GunShooting : MonoBehaviour
         nextFireTime = Time.time + fireRate;
 
         UpdateAmmoUI();
-
         PlayFireSound();
-
         AddRecoil();
 
         Ray ray = playerCam.ScreenPointToRay(
