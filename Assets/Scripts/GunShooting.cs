@@ -15,7 +15,7 @@ public class GunShooting : MonoBehaviour
 
     [Header("Shooting")]
     public float damage = 25f;
-    public float fireRate = 0.1f;
+    public float fireRate = 0.16f;
     public int magazineSize = 30;
     public int maxReserveAmmo = 90;
     public float reloadTime = 2f;
@@ -145,7 +145,7 @@ public class GunShooting : MonoBehaviour
 
         if (reloadingText != null)
         {
-            reloadingText.gameObject.SetActive(false);
+            TrainingUiStyle.SetVisible(reloadingText, false);
         }
 
         if (playerCam == null)
@@ -181,6 +181,21 @@ public class GunShooting : MonoBehaviour
 
     void Update()
     {
+        if (IsGameplayBlockedByMenu())
+        {
+            if (inputActions != null)
+            {
+                inputActions.Player.Disable();
+            }
+
+            return;
+        }
+
+        if (inputActions != null && !inputActions.Player.enabled)
+        {
+            inputActions.Player.Enable();
+        }
+
         HandleShootingInput();
         HandleReloadInput();
         UpdateRecoil();
@@ -193,6 +208,11 @@ public class GunShooting : MonoBehaviour
 
     void HandleShootingInput()
     {
+        if (IsGameplayBlockedByMenu())
+        {
+            return;
+        }
+
         if (isReloading)
         {
             return;
@@ -234,6 +254,11 @@ public class GunShooting : MonoBehaviour
 
     void Shoot()
     {
+        if (IsGameplayBlockedByMenu())
+        {
+            return;
+        }
+
         currentAmmo--;
         nextFireTime = Time.time + fireRate;
 
@@ -265,7 +290,8 @@ public class GunShooting : MonoBehaviour
 
                 if (target != null)
                 {
-                    target.TakeDamage(damage);
+                    bool headshot = IsHeadshot(hit, target);
+                    target.TakeDamage(headshot ? target.maxHealth : 25f, headshot);
                     ShowHitMarker();
                 }
 
@@ -283,14 +309,48 @@ public class GunShooting : MonoBehaviour
         ShowTracerEffect(targetPoint);
     }
 
+    bool IsHeadshot(RaycastHit hit, TargetHealth target)
+    {
+        Collider hitCollider = hit.collider;
+        Transform current = hitCollider.transform;
+
+        while (current != null)
+        {
+            if (current.name.ToLower().Contains("head"))
+            {
+                return true;
+            }
+
+            current = current.parent;
+        }
+
+        return false;
+    }
+
     void PlayFireSound()
     {
+        if (IsGameplayBlockedByMenu())
+        {
+            return;
+        }
+
         if (weaponAudioSource == null || fireSound == null)
         {
             return;
         }
 
         PlayClipFromTime(fireSound, fireVolume, fireSoundStartTime, "GunshotAudio");
+    }
+
+    bool IsGameplayBlockedByMenu()
+    {
+        if (Time.timeScale <= 0.0001f)
+        {
+            return true;
+        }
+
+        GameObject menuCanvas = GameObject.Find("MainMenuCanvas");
+        return menuCanvas != null && menuCanvas.activeInHierarchy;
     }
 
     void PlayReloadSound()
@@ -437,6 +497,22 @@ public class GunShooting : MonoBehaviour
         reloadRoutine = StartCoroutine(ReloadCoroutine());
     }
 
+    public void ResetAmmo()
+    {
+        if (reloadRoutine != null)
+        {
+            StopCoroutine(reloadRoutine);
+            reloadRoutine = null;
+        }
+
+        isReloading = false;
+        currentAmmo = magazineSize;
+        currentReserve = maxReserveAmmo;
+        nextFireTime = 0f;
+        SetReloadingTextVisible(false);
+        UpdateAmmoUI();
+    }
+
     IEnumerator ReloadCoroutine()
     {
         isReloading = true;
@@ -533,7 +609,7 @@ public class GunShooting : MonoBehaviour
     {
         if (reloadingText != null)
         {
-            reloadingText.gameObject.SetActive(visible);
+            TrainingUiStyle.SetVisible(reloadingText, visible);
         }
     }
 
@@ -550,21 +626,22 @@ public class GunShooting : MonoBehaviour
             canvasObject.AddComponent<UnityEngine.UI.GraphicRaycaster>();
         }
 
-        GameObject textObject = new GameObject("ReloadingText");
-        textObject.transform.SetParent(canvas.transform, false);
+        TextMeshProUGUI text = TrainingUiStyle.CreateText(
+            canvas.transform,
+            "ReloadingText",
+            42f,
+            TextAlignmentOptions.Center,
+            new Vector2(540f, 90f)
+        );
 
-        TextMeshProUGUI text = textObject.AddComponent<TextMeshProUGUI>();
-        text.text = "Reloading";
-        text.fontSize = 42f;
-        text.alignment = TextAlignmentOptions.Center;
-        text.color = Color.white;
-
-        RectTransform rectTransform = text.rectTransform;
-        rectTransform.anchorMin = new Vector2(0.5f, 0f);
-        rectTransform.anchorMax = new Vector2(0.5f, 0f);
-        rectTransform.pivot = new Vector2(0.5f, 0f);
-        rectTransform.anchoredPosition = new Vector2(0f, 120f);
-        rectTransform.sizeDelta = new Vector2(500f, 80f);
+        TrainingUiStyle.SetMessage(text, "Reloading");
+        TrainingUiStyle.PositionPanel(
+            text,
+            new Vector2(0.5f, 0f),
+            new Vector2(0.5f, 0f),
+            new Vector2(0.5f, 0f),
+            new Vector2(0f, 120f)
+        );
 
         return text;
     }

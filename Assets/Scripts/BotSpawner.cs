@@ -23,6 +23,7 @@ public class BotSpawner : MonoBehaviour
     public bool expandMapBeforeSpawning = false;
     public bool buildFloorBoundaryBeforeSpawning = true;
     public bool scatterPropsBeforeSpawning = true;
+    public bool showMainMenuOnStart = false;
 
     [Header("Optional Fixed Spawn Points")]
     public Transform spawnPointsParent;
@@ -33,6 +34,7 @@ public class BotSpawner : MonoBehaviour
     public float minDistanceFromPlayer = 7f;
     public float maxDistanceFromPlayer = 60f;
     public float minDistanceBetweenBots = 2f;
+    public bool enforcePlayerDistanceInMapBounds = false;
 
     [Header("Expanded Map Bounds")]
     public bool useExpandedMapBounds = true;
@@ -62,11 +64,14 @@ public class BotSpawner : MonoBehaviour
     public float maxFlatHeightDifference = 0.35f;
     [Range(0f, 1f)]
     public float minSurfaceUpDot = 0.9f;
+    public bool relaxSpawnChecks = true;
 
     [Header("Wall Clearance")]
     public float botClearanceRadius = 0.25f;
     public float botClearanceBottom = 0.55f;
     public float botClearanceTop = 1.9f;
+    public bool requireOpenGroundAroundBot = true;
+    public float openGroundRadius = 2.6f;
 
     [Header("Bot Visual")]
     public bool replaceGeneratedBotVisual = true;
@@ -74,7 +79,12 @@ public class BotSpawner : MonoBehaviour
     public Vector3 botVisualLocalPosition = Vector3.zero;
     public Vector3 botVisualLocalEulerAngles = Vector3.zero;
     public float botVisualScale = 1f;
+    public bool normalizeGeneratedBotVisualSize = true;
+    public float botVisualTargetHeight = 1.85f;
+    public float botVisualGroundInset = 0.28f;
     public bool normalizeGeneratedBotCollider = true;
+    public bool tintGeneratedBotVisual = true;
+    public Color botVisualTint = new Color(0.1f, 0.35f, 1f, 1f);
 
     private readonly List<Vector3> spawnedPositions = new List<Vector3>();
 
@@ -123,6 +133,21 @@ public class BotSpawner : MonoBehaviour
             ScatterMapProps();
         }
 
+        if (showMainMenuOnStart)
+        {
+            MainMenuController mainMenu = GetComponent<MainMenuController>();
+
+            if (mainMenu == null)
+            {
+                mainMenu = gameObject.AddComponent<MainMenuController>();
+            }
+
+            mainMenu.ShowMenu();
+            return;
+        }
+
+        ResetGameplayFromMenu();
+
         if (enableLevel1TrainingCamp && GetComponent<Level1TrainingCamp>() == null)
         {
             gameObject.AddComponent<Level1TrainingCamp>();
@@ -142,6 +167,7 @@ public class BotSpawner : MonoBehaviour
         expandMapBeforeSpawning = false;
         buildFloorBoundaryBeforeSpawning = true;
         scatterPropsBeforeSpawning = true;
+        showMainMenuOnStart = false;
         preferSpawnPoints = false;
         useExpandedMapBounds = true;
         usePlayerAsMapCenter = true;
@@ -152,15 +178,51 @@ public class BotSpawner : MonoBehaviour
         minDistanceFromPlayer = 7f;
         maxDistanceFromPlayer = 60f;
         minDistanceBetweenBots = 2f;
+        enforcePlayerDistanceInMapBounds = false;
         navMeshSearchRadius = 6f;
         maxAttemptsPerBot = 2000;
         maxSpawnHeightAbovePlayer = 2.5f;
         requiredFlatRadius = 0.45f;
         maxFlatHeightDifference = 0.35f;
+        relaxSpawnChecks = true;
         botClearanceRadius = 0.25f;
+        requireOpenGroundAroundBot = true;
+        openGroundRadius = 2.6f;
         replaceGeneratedBotVisual = true;
         normalizeGeneratedBotCollider = true;
         botVisualScale = 1f;
+        normalizeGeneratedBotVisualSize = true;
+        botVisualTargetHeight = 1.85f;
+        botVisualGroundInset = 0.28f;
+        botVisualLocalPosition = Vector3.zero;
+        botVisualLocalEulerAngles = Vector3.zero;
+        tintGeneratedBotVisual = true;
+        botVisualTint = new Color(0.1f, 0.35f, 1f, 1f);
+    }
+
+    void ResetGameplayFromMenu()
+    {
+        Time.timeScale = 1f;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+
+        GameObject[] menuCanvases = GameObject.FindGameObjectsWithTag("Untagged");
+
+        for (int i = 0; i < menuCanvases.Length; i++)
+        {
+            if (menuCanvases[i] != null && menuCanvases[i].name == "MainMenuCanvas")
+            {
+                Destroy(menuCanvases[i]);
+            }
+        }
+
+        MainMenuController[] menus = FindObjectsByType<MainMenuController>(FindObjectsSortMode.None);
+
+        for (int i = 0; i < menus.Length; i++)
+        {
+            menus[i].enabled = false;
+            Destroy(menus[i]);
+        }
     }
 
     void ScatterMapProps()
@@ -267,14 +329,29 @@ public class BotSpawner : MonoBehaviour
 
     public GameObject SpawnOneBot()
     {
+        return SpawnOneBotFromCandidate(GetCandidatePosition);
+    }
+
+    public GameObject SpawnOneBotNear(Vector3 center, float minDistance, float maxDistance)
+    {
+        return SpawnOneBotFromCandidate(() => GetRandomPositionAroundPoint(center, minDistance, maxDistance));
+    }
+
+    public GameObject SpawnOneBotAt(Vector3 position)
+    {
+        return SpawnOneBotFromCandidate(() => position);
+    }
+
+    GameObject SpawnOneBotFromCandidate(System.Func<Vector3> candidateProvider)
+    {
         for (int attempt = 0; attempt < maxAttemptsPerBot; attempt++)
         {
             float relaxation = maxAttemptsPerBot <= 1 ? 1f : (float)attempt / (maxAttemptsPerBot - 1);
-            float effectiveFlatRadius = Mathf.Lerp(requiredFlatRadius, 0.2f, relaxation);
-            float effectiveClearanceRadius = Mathf.Lerp(botClearanceRadius, 0.12f, relaxation);
-            float effectiveBotSpacing = Mathf.Lerp(minDistanceBetweenBots, 0.75f, relaxation);
+            float effectiveFlatRadius = relaxSpawnChecks ? Mathf.Lerp(requiredFlatRadius, 0.2f, relaxation) : requiredFlatRadius;
+            float effectiveClearanceRadius = relaxSpawnChecks ? Mathf.Lerp(botClearanceRadius, 0.12f, relaxation) : botClearanceRadius;
+            float effectiveBotSpacing = relaxSpawnChecks ? Mathf.Lerp(minDistanceBetweenBots, 0.75f, relaxation) : minDistanceBetweenBots;
 
-            Vector3 candidatePosition = GetCandidatePosition();
+            Vector3 candidatePosition = candidateProvider();
 
             if (!TryGetSpawnPosition(candidatePosition, out Vector3 spawnPosition, effectiveFlatRadius, effectiveClearanceRadius))
             {
@@ -288,6 +365,7 @@ public class BotSpawner : MonoBehaviour
 
             Quaternion randomRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
             GameObject spawnedBot = Instantiate(botPrefab, spawnPosition, randomRotation);
+            SnapSpawnedBotRootToGround(spawnedBot);
             PrepareSpawnedBot(spawnedBot);
             spawnedPositions.Add(spawnPosition);
             return spawnedBot;
@@ -315,6 +393,13 @@ public class BotSpawner : MonoBehaviour
             }
         }
 
+        TargetHealth targetHealth = spawnedBot.GetComponent<TargetHealth>();
+
+        if (targetHealth != null)
+        {
+            targetHealth.ResetHealth(100f);
+        }
+
         if (!replaceGeneratedBotVisual)
         {
             return;
@@ -335,20 +420,115 @@ public class BotSpawner : MonoBehaviour
         }
 
         GameObject botVisual = Instantiate(botVisualPrefab, spawnedBot.transform);
-        botVisual.name = "BotVisual_Idle";
+        botVisual.name = "BotVisual_FiringRifle";
         botVisual.transform.localPosition = botVisualLocalPosition;
         botVisual.transform.localRotation = Quaternion.Euler(botVisualLocalEulerAngles);
         botVisual.transform.localScale = Vector3.one * botVisualScale;
+        NormalizeVisualHeight(botVisual);
+        AlignVisualFeetToGround(botVisual, spawnedBot.transform.position.y);
+        ApplyVisualTint(botVisual);
+    }
+
+    void ApplyVisualTint(GameObject botVisual)
+    {
+        if (!tintGeneratedBotVisual || botVisual == null)
+        {
+            return;
+        }
+
+        Renderer[] renderers = botVisual.GetComponentsInChildren<Renderer>();
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Material[] materials = renderers[i].materials;
+
+            for (int j = 0; j < materials.Length; j++)
+            {
+                if (materials[j].HasProperty("_BaseColor"))
+                {
+                    materials[j].SetColor("_BaseColor", botVisualTint);
+                }
+                else if (materials[j].HasProperty("_Color"))
+                {
+                    materials[j].SetColor("_Color", botVisualTint);
+                }
+            }
+        }
+    }
+
+    void SnapSpawnedBotRootToGround(GameObject spawnedBot)
+    {
+        if (spawnedBot == null)
+        {
+            return;
+        }
+
+        if (TryGetBestSurfacePosition(spawnedBot.transform.position, out Vector3 surfacePosition, spawnedBot.transform.root))
+        {
+            spawnedBot.transform.position = surfacePosition;
+        }
     }
 
     void AutoAssignBotVisualPrefab()
     {
 #if UNITY_EDITOR
-        if (botVisualPrefab == null)
+        if (botVisualPrefab == null || botVisualPrefab.name != "Firing Rifle")
         {
-            botVisualPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Modles/Idle.fbx");
+            botVisualPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Modles/Firing Rifle.fbx");
         }
 #endif
+    }
+
+    void AlignVisualFeetToGround(GameObject botVisual, float groundY)
+    {
+        if (!TryGetRendererBounds(botVisual, out Bounds bounds))
+        {
+            return;
+        }
+
+        float yOffset = groundY - bounds.min.y - botVisualGroundInset;
+        botVisual.transform.position += Vector3.up * yOffset;
+    }
+
+    void NormalizeVisualHeight(GameObject botVisual)
+    {
+        if (!normalizeGeneratedBotVisualSize)
+        {
+            return;
+        }
+
+        if (!TryGetRendererBounds(botVisual, out Bounds bounds))
+        {
+            return;
+        }
+
+        if (bounds.size.y <= 0.01f)
+        {
+            return;
+        }
+
+        float scaleMultiplier = botVisualTargetHeight / bounds.size.y;
+        botVisual.transform.localScale *= scaleMultiplier;
+    }
+
+    bool TryGetRendererBounds(GameObject targetObject, out Bounds bounds)
+    {
+        Renderer[] renderers = targetObject.GetComponentsInChildren<Renderer>();
+
+        if (renderers.Length == 0)
+        {
+            bounds = default;
+            return false;
+        }
+
+        bounds = renderers[0].bounds;
+
+        for (int i = 1; i < renderers.Length; i++)
+        {
+            bounds.Encapsulate(renderers[i].bounds);
+        }
+
+        return true;
     }
 
 #if UNITY_EDITOR
@@ -410,10 +590,15 @@ public class BotSpawner : MonoBehaviour
 
     Vector3 GetRandomPositionAroundPlayer()
     {
-        Vector2 randomDirection = Random.insideUnitCircle.normalized;
-        float randomDistance = Random.Range(minDistanceFromPlayer, maxDistanceFromPlayer);
+        return GetRandomPositionAroundPoint(player.position, minDistanceFromPlayer, maxDistanceFromPlayer);
+    }
 
-        return player.position + new Vector3(
+    Vector3 GetRandomPositionAroundPoint(Vector3 center, float minDistance, float maxDistance)
+    {
+        Vector2 randomDirection = Random.insideUnitCircle.normalized;
+        float randomDistance = Random.Range(minDistance, maxDistance);
+
+        return center + new Vector3(
             randomDirection.x * randomDistance,
             0f,
             randomDirection.y * randomDistance
@@ -454,11 +639,55 @@ public class BotSpawner : MonoBehaviour
 
     bool TryGetSurfacePosition(Vector3 candidatePosition, out Vector3 surfacePosition)
     {
-        Vector3 rayOrigin = candidatePosition + Vector3.up * surfaceRaycastHeight;
+        return TryGetBestSurfacePosition(candidatePosition, out surfacePosition, null);
+    }
 
-        if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, surfaceRaycastHeight * 2f, spawnSurfaceMask, QueryTriggerInteraction.Ignore))
+    bool TryGetBestSurfacePosition(Vector3 candidatePosition, out Vector3 surfacePosition, Transform ignoredRoot)
+    {
+        Vector3 rayOrigin = candidatePosition + Vector3.up * surfaceRaycastHeight;
+        RaycastHit[] hits = Physics.RaycastAll(
+            rayOrigin,
+            Vector3.down,
+            surfaceRaycastHeight * 2f,
+            spawnSurfaceMask,
+            QueryTriggerInteraction.Ignore
+        );
+
+        RaycastHit bestHit = default;
+        float bestScore = float.MaxValue;
+        bool foundHit = false;
+
+        for (int i = 0; i < hits.Length; i++)
         {
-            surfacePosition = hit.point + Vector3.up * spawnHeightOffset;
+            if (ignoredRoot != null && hits[i].collider.transform.root == ignoredRoot)
+            {
+                continue;
+            }
+
+            if (Vector3.Dot(hits[i].normal, Vector3.up) < minSurfaceUpDot)
+            {
+                continue;
+            }
+
+            if (player != null && hits[i].point.y > player.position.y + maxSpawnHeightAbovePlayer)
+            {
+                continue;
+            }
+
+            float heightScore = player != null ? Mathf.Abs(hits[i].point.y - player.position.y) : Mathf.Abs(hits[i].point.y - candidatePosition.y);
+            float candidateScore = heightScore * 10f + Mathf.Abs(hits[i].point.y - candidatePosition.y);
+
+            if (!foundHit || candidateScore < bestScore)
+            {
+                bestHit = hits[i];
+                bestScore = candidateScore;
+                foundHit = true;
+            }
+        }
+
+        if (foundHit)
+        {
+            surfacePosition = bestHit.point + Vector3.up * spawnHeightOffset;
             return true;
         }
 
@@ -468,6 +697,18 @@ public class BotSpawner : MonoBehaviour
 
     bool IsValidSpawnLocation(Vector3 spawnPosition, float effectiveFlatRadius, float effectiveClearanceRadius)
     {
+        if (useExpandedMapBounds && enforcePlayerDistanceInMapBounds && player != null)
+        {
+            Vector2 playerFlatPosition = new Vector2(player.position.x, player.position.z);
+            Vector2 spawnFlatPosition = new Vector2(spawnPosition.x, spawnPosition.z);
+            float distanceFromPlayer = Vector2.Distance(playerFlatPosition, spawnFlatPosition);
+
+            if (distanceFromPlayer < minDistanceFromPlayer || distanceFromPlayer > maxDistanceFromPlayer)
+            {
+                return false;
+            }
+        }
+
         if (spawnPosition.y > player.position.y + maxSpawnHeightAbovePlayer)
         {
             return false;
@@ -478,7 +719,8 @@ public class BotSpawner : MonoBehaviour
             return false;
         }
 
-        return HasEnoughWallClearance(spawnPosition, effectiveClearanceRadius);
+        return HasEnoughWallClearance(spawnPosition, effectiveClearanceRadius) &&
+            HasEnoughOpenGround(spawnPosition);
     }
 
     bool HasEnoughFlatGround(Vector3 spawnPosition, float effectiveFlatRadius)
@@ -500,23 +742,16 @@ public class BotSpawner : MonoBehaviour
 
         for (int i = 0; i < sampleOffsets.Length; i++)
         {
-            Vector3 sampleOrigin = spawnPosition + sampleOffsets[i] + Vector3.up * surfaceRaycastHeight;
-
-            if (!Physics.Raycast(sampleOrigin, Vector3.down, out RaycastHit hit, surfaceRaycastHeight * 2f, spawnSurfaceMask, QueryTriggerInteraction.Ignore))
-            {
-                return false;
-            }
-
-            if (Vector3.Dot(hit.normal, Vector3.up) < minSurfaceUpDot)
+            if (!TryGetBestSurfacePosition(spawnPosition + sampleOffsets[i], out Vector3 sampleSurfacePosition, null))
             {
                 return false;
             }
 
             if (i == 0)
             {
-                baseHeight = hit.point.y;
+                baseHeight = sampleSurfacePosition.y;
             }
-            else if (Mathf.Abs(hit.point.y - baseHeight) > maxFlatHeightDifference)
+            else if (Mathf.Abs(sampleSurfacePosition.y - baseHeight) > maxFlatHeightDifference)
             {
                 return false;
             }
@@ -537,6 +772,59 @@ public class BotSpawner : MonoBehaviour
             blockingMask,
             QueryTriggerInteraction.Ignore
         );
+    }
+
+    bool HasEnoughOpenGround(Vector3 spawnPosition)
+    {
+        if (!requireOpenGroundAroundBot)
+        {
+            return true;
+        }
+
+        Vector3 bottom = spawnPosition + Vector3.up * 0.25f;
+        Vector3 top = spawnPosition + Vector3.up * 1.85f;
+        Collider[] hits = Physics.OverlapCapsule(
+            bottom,
+            top,
+            openGroundRadius,
+            blockingMask,
+            QueryTriggerInteraction.Ignore
+        );
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Transform hitRoot = hits[i].transform.root;
+
+            if (player != null && hitRoot == player.root)
+            {
+                continue;
+            }
+
+            if (IsGroundLikeCollider(hits[i], spawnPosition.y))
+            {
+                continue;
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
+    bool IsGroundLikeCollider(Collider hitCollider, float spawnY)
+    {
+        string objectName = hitCollider.gameObject.name.ToLower();
+
+        if (objectName == "bg" || objectName.Contains("floor") || objectName.Contains("ground"))
+        {
+            return true;
+        }
+
+        Bounds bounds = hitCollider.bounds;
+        bool veryFlat = bounds.size.y <= 0.35f;
+        bool closeToFeet = bounds.max.y <= spawnY + 0.2f;
+
+        return veryFlat && closeToFeet;
     }
 
     bool IsFarEnoughFromOtherBots(Vector3 spawnPosition, float effectiveBotSpacing)

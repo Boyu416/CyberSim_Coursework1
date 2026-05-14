@@ -24,6 +24,8 @@ namespace StarterAssets
 		public bool ForceCsMovementValues = true;
 		[Tooltip("Move speed while holding Ctrl")]
 		public float QuietWalkSpeed = 2.8f;
+		[Tooltip("Speed multiplier while holding Ctrl")]
+		public float CtrlSpeedMultiplier = 1.5f;
 
 		[Header("Crouch")]
 		[Tooltip("Move speed while crouching")]
@@ -92,6 +94,7 @@ namespace StarterAssets
 		private bool _isCrouching;
 
 		private const float _threshold = 0.01f;
+		private const string SensitivityKey = "CyberSim_MouseSensitivity";
 
 		private bool IsCurrentDeviceMouse
 		{
@@ -120,6 +123,8 @@ namespace StarterAssets
 			{
 				ApplyCsMovementValues();
 			}
+
+			RotationSpeed = PlayerPrefs.GetFloat(SensitivityKey, RotationSpeed);
 
 			_controller = GetComponent<CharacterController>();
 			_input = GetComponent<StarterAssetsInputs>();
@@ -186,7 +191,7 @@ namespace StarterAssets
 		private void Move()
 		{
 			// set target speed based on move speed, sprint speed and if sprint is pressed
-			float targetSpeed = _isCrouching ? CrouchSpeed : (IsQuietWalkPressed() ? QuietWalkSpeed : MoveSpeed);
+			float targetSpeed = _isCrouching ? CrouchSpeed : (IsQuietWalkPressed() ? MoveSpeed * CtrlSpeedMultiplier : MoveSpeed);
 
 			// a simplistic acceleration and deceleration designed to be easy to remove, replace, or iterate upon
 
@@ -238,7 +243,7 @@ namespace StarterAssets
 #else
 			bool shiftPressed = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
 #endif
-			bool wantsToCrouch = _input.crouch || shiftPressed;
+			bool wantsToCrouch = shiftPressed;
 
 			if (!wantsToCrouch && !CanStandUp())
 			{
@@ -288,7 +293,8 @@ namespace StarterAssets
 		{
 			MoveSpeed = 7.0f;
 			SprintSpeed = 7.0f;
-			QuietWalkSpeed = 2.8f;
+			QuietWalkSpeed = 10.5f;
+			CtrlSpeedMultiplier = 1.5f;
 			CrouchSpeed = 2.1f;
 			SpeedChangeRate = 12.0f;
 		}
