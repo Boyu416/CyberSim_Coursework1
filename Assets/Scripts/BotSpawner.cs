@@ -107,6 +107,8 @@ public class BotSpawner : MonoBehaviour
             }
         }
 
+        EnsurePlayerFootsteps();
+
         if (useExpandedMapBounds && usePlayerAsMapCenter && player != null)
         {
             mapCenter = player.position;
@@ -157,6 +159,36 @@ public class BotSpawner : MonoBehaviour
         {
             SpawnBotsAroundPlayer();
         }
+    }
+
+    void EnsurePlayerFootsteps()
+    {
+        GameObject playerObject = player != null ? player.gameObject : null;
+
+        if (playerObject == null || playerObject.GetComponent<CharacterController>() == null)
+        {
+            StarterAssets.FirstPersonController firstPersonController = FindFirstObjectByType<StarterAssets.FirstPersonController>();
+
+            if (firstPersonController != null)
+            {
+                playerObject = firstPersonController.gameObject;
+            }
+        }
+
+        if (playerObject == null || playerObject.GetComponent<CharacterController>() == null)
+        {
+            return;
+        }
+
+        PlayerFootstepAudio footsteps = playerObject.GetComponent<PlayerFootstepAudio>();
+
+        if (footsteps == null)
+        {
+            footsteps = playerObject.AddComponent<PlayerFootstepAudio>();
+        }
+
+        footsteps.volume = 0.35f;
+        footsteps.minMoveSpeed = 0.15f;
     }
 
     void ApplyStableRuntimeValues()

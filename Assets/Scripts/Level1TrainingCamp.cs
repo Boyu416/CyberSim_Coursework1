@@ -152,7 +152,7 @@ public class Level1TrainingCamp : MonoBehaviour
         if (!hasShownHeadshotTip)
         {
             hasShownHeadshotTip = true;
-            ShowTip("TIP: Headshots kill instantly. Body shots take 4 hits.");
+            ShowTip("TIP: Headshots kill instantly. Body shots take 2 hits.");
         }
 
         ShowPrompt("ELIMINATE THE TRAINING BOT");

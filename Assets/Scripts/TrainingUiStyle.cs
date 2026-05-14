@@ -137,7 +137,7 @@ public static class TrainingUiStyle
             "HP",
             "TIP:",
             "Headshots kill instantly.",
-            "Body shots take 4 hits."
+            "Body shots take 2 hits."
         };
 
         for (int i = 0; i < keywords.Length; i++)

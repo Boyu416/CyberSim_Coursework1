@@ -3,6 +3,9 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 public class Level3BombDefusal : MonoBehaviour
 {
@@ -28,6 +31,10 @@ public class Level3BombDefusal : MonoBehaviour
     public TextMeshProUGUI centerPromptText;
     public TextMeshProUGUI interactText;
 
+    [Header("Mission Complete Audio")]
+    public AudioClip missionCompleteMusic;
+    public float missionCompleteMusicVolume = 0.75f;
+
     private readonly List<TargetHealth> enemies = new List<TargetHealth>();
     private BotSpawner botSpawner;
     private Transform player;
@@ -39,10 +46,12 @@ public class Level3BombDefusal : MonoBehaviour
     private bool levelRunning;
     private bool gameOver;
     private bool levelComplete;
+    private AudioSource missionAudioSource;
 
     void Awake()
     {
         botSpawner = GetComponent<BotSpawner>();
+        AutoAssignMissionCompleteMusic();
     }
 
     void OnEnable()
@@ -112,6 +121,7 @@ public class Level3BombDefusal : MonoBehaviour
         ClearExistingEnemies();
         DestroyBomb();
         enemies.Clear();
+        StopMissionCompleteMusic();
 
         timerRemaining = bombTimerSeconds;
         defuseHeldTime = 0f;
@@ -407,13 +417,6 @@ public class Level3BombDefusal : MonoBehaviour
             return;
         }
 
-        if (enemies.Count > 0)
-        {
-            defuseHeldTime = 0f;
-            ShowInteractPrompt("ELIMINATE ALL BOTS");
-            return;
-        }
-
         bool holdingDefuse = Keyboard.current != null && Keyboard.current.eKey.isPressed;
 
         if (holdingDefuse)
@@ -489,6 +492,7 @@ public class Level3BombDefusal : MonoBehaviour
         ShowCenterPrompt("MISSION COMPLETE\nBOMB DEFUSED");
         TrainingUiStyle.SetVisible(interactText, false);
         SetEnemyAiEnabled(false);
+        PlayMissionCompleteMusic();
     }
 
     void FailMission(string message)
@@ -498,6 +502,50 @@ public class Level3BombDefusal : MonoBehaviour
         ShowCenterPrompt(message);
         TrainingUiStyle.SetVisible(interactText, false);
         SetEnemyAiEnabled(false);
+        StopMissionCompleteMusic();
+    }
+
+    void AutoAssignMissionCompleteMusic()
+    {
+#if UNITY_EDITOR
+        if (missionCompleteMusic == null)
+        {
+            missionCompleteMusic = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Sounds/mvp【Under Bright Lights】.mp3");
+        }
+#endif
+    }
+
+    void PlayMissionCompleteMusic()
+    {
+        AutoAssignMissionCompleteMusic();
+
+        if (missionCompleteMusic == null)
+        {
+            return;
+        }
+
+        if (missionAudioSource == null)
+        {
+            GameObject audioObject = new GameObject("MissionCompleteMusic");
+            audioObject.transform.SetParent(transform, false);
+            missionAudioSource = audioObject.AddComponent<AudioSource>();
+            missionAudioSource.playOnAwake = false;
+            missionAudioSource.loop = false;
+            missionAudioSource.spatialBlend = 0f;
+        }
+
+        missionAudioSource.clip = missionCompleteMusic;
+        missionAudioSource.volume = missionCompleteMusicVolume;
+        missionAudioSource.Stop();
+        missionAudioSource.Play();
+    }
+
+    void StopMissionCompleteMusic()
+    {
+        if (missionAudioSource != null && missionAudioSource.isPlaying)
+        {
+            missionAudioSource.Stop();
+        }
     }
 
     void ClearExistingEnemies()

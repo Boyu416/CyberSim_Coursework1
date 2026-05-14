@@ -6,7 +6,7 @@ public class TargetHealth : MonoBehaviour
 
     public float maxHealth = 100f;
     public bool forceStandardBotHealth = true;
-    public int bodyHitsToKill = 4;
+    public int bodyHitsToKill = 2;
 
     private float currentHealth;
     private int bodyHitsTaken;
